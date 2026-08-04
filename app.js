@@ -277,26 +277,34 @@ async function loadSessionHistory() {
 /* ---------------------------------------------------------
    Upload: filename parsing + drag & drop
 --------------------------------------------------------- */
-// Pattern: 国战UI.WEI044.素玄.程昱.png -> faction=WEI, num=044, nickname=素玄, name=程昱
-const FILENAME_PATTERN = /^国战UI\.([A-Z]+)(\d+)\.([^.]+)\.([^.]+)$/;
-
+// Filenames vary in length (some have an extra descriptive segment before
+// the name), but the actual card NAME is always the last dot-separated
+// segment before the file extension. Faction/id, if present anywhere as a
+// FACTION### segment, is used as a starting guess — you can always correct
+// it afterward in Supabase's Table Editor, so this doesn't need to be exact.
 function parseFilename(filename) {
   const dotIdx = filename.lastIndexOf(".");
   const stem = dotIdx >= 0 ? filename.slice(0, dotIdx) : filename;
-  const match = stem.match(FILENAME_PATTERN);
-  if (match) {
-    const [, faction, num, nickname, name] = match;
-    return { faction, cardId: `${faction}${num}`, nickname, name };
-  }
-  // Fallback for anything that doesn't fit the four-faction pattern.
-  // Still tries to spot a known faction code anywhere in the name;
-  // otherwise files it under OTHER using the filename itself as the name.
-  const knownFactionMatch = stem.match(/(WEI|SHU|WU|QUN)/);
-  const faction = knownFactionMatch ? knownFactionMatch[1] : "OTHER";
   const segments = stem.split(".");
+
   const name = segments[segments.length - 1] || stem;
-  const idSafe = stem.replace(/[^A-Za-z0-9\u4e00-\u9fff]+/g, "_");
-  return { faction: "OTHER" === faction ? "OTHER" : faction, cardId: `${faction}_${idSafe}`, nickname: "", name };
+
+  let faction = "OTHER";
+  let cardId = null;
+  for (const seg of segments) {
+    const m = seg.match(/^(WEI|SHU|WU|QUN)(\d+)$/);
+    if (m) {
+      faction = m[1];
+      cardId = `${m[1]}${m[2]}`;
+      break;
+    }
+  }
+  if (!cardId) {
+    const idSafe = stem.replace(/[^A-Za-z0-9\u4e00-\u9fff]+/g, "_");
+    cardId = `OTHER_${idSafe}`;
+  }
+
+  return { faction, cardId, nickname: "", name };
 }
 
 function logUpload(message, cls) {
@@ -334,7 +342,7 @@ async function handleFiles(fileList) {
       );
       if (dbError) throw dbError;
 
-      const tag = parsed.faction === "OTHER" ? " (filed under 其他/OTHER — pattern didn't match)" : "";
+      const tag = parsed.faction === "OTHER" ? " (no faction detected — set it manually in Supabase)" : "";
       logUpload(`OK    ${parsed.cardId}  ${parsed.name}${tag}`, parsed.faction === "OTHER" ? "skip" : "ok");
     } catch (err) {
       logUpload(`FAIL  ${file.name}  (${err.message})`, "fail");
