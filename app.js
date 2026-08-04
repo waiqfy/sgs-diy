@@ -343,21 +343,48 @@ async function loadSessionHistory() {
 // segment before the file extension. The faction/type for the whole batch
 // is whatever the person selects in the dropdown before uploading.
 //
-// The card ID is built from faction + name (not the filename's number, and
-// not the whole filename) so that:
-//   - two different cards that happen to share a reused number stay separate
-//   - re-uploading a file with the same name overwrites the old version,
-//     since that's normally just an updated image/edit of the same card
+// The card ID is based on the NUMBER found in the filename (e.g. "003" in
+// "WEI003"), not the name. If that number is already used by a card with
+// the SAME name, it's treated as an update (overwrite). If it's already
+// used by a DIFFERENT name — a reused/duplicate number — a letter suffix
+// (a, b, c...) is appended so both cards are kept, instead of colliding.
 function parseFilename(filename, chosenFaction) {
   const dotIdx = filename.lastIndexOf(".");
   const stem = dotIdx >= 0 ? filename.slice(0, dotIdx) : filename;
   const segments = stem.split(".");
   const name = segments[segments.length - 1] || stem;
 
-  const nameSafe = name.replace(/[^A-Za-z0-9\u4e00-\u9fff]+/g, "_");
-  const cardId = `${chosenFaction}_${nameSafe}`;
+  let number = null;
+  for (const seg of segments) {
+    const m = seg.match(/(\d+)/);
+    if (m) { number = m[1]; break; }
+  }
 
-  return { faction: chosenFaction, cardId, nickname: "", name };
+  const baseCardId = number
+    ? `${chosenFaction}${number}`
+    : `${chosenFaction}_${name.replace(/[^A-Za-z0-9\u4e00-\u9fff]+/g, "_")}`;
+
+  return { faction: chosenFaction, baseCardId, nickname: "", name };
+}
+
+// Given a base ID like "WEI003", find the right final ID:
+//  - if unused, use it as-is
+//  - if used by a card with the same name, reuse it (upsert will overwrite)
+//  - if used by a card with a different name, try "WEI003a", "WEI003b", etc.
+async function resolveCardId(baseId, name) {
+  let candidate = baseId;
+  let suffixCode = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("cards")
+      .select("card_id, name")
+      .eq("card_id", candidate)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data || data.name === name) return candidate;
+    suffixCode += 1;
+    candidate = `${baseId}${String.fromCharCode(96 + suffixCode)}`; // a, b, c...
+  }
 }
 
 function logUpload(message, cls) {
@@ -373,9 +400,14 @@ async function handleFiles(fileList, chosenFaction) {
   for (const file of files) {
     const parsed = parseFilename(file.name, chosenFaction);
     const ext = file.name.slice(file.name.lastIndexOf("."));
-    const storagePath = `${parsed.faction}/${parsed.cardId}${ext}`;
 
     try {
+      const cardId = await resolveCardId(parsed.baseCardId, parsed.name);
+      // Storage keys must be ASCII — Supabase Storage rejects raw Chinese
+      // characters in the path. The database columns (name, card_id as text)
+      // keep the real Chinese text; only the file's storage path is encoded.
+      const storagePath = `${parsed.faction}/${encodeURIComponent(cardId)}${ext}`;
+
       const { error: uploadError } = await supabase.storage
         .from(BUCKET_NAME)
         .upload(storagePath, file, { upsert: true });
@@ -386,7 +418,7 @@ async function handleFiles(fileList, chosenFaction) {
       const { error: dbError } = await supabase.from("cards").upsert(
         {
           faction: parsed.faction,
-          card_id: parsed.cardId,
+          card_id: cardId,
           name: parsed.name,
           nickname: parsed.nickname,
           image_url: urlData.publicUrl,
@@ -395,7 +427,7 @@ async function handleFiles(fileList, chosenFaction) {
       );
       if (dbError) throw dbError;
 
-      logUpload(`OK    ${parsed.cardId}  ${parsed.name}`, "ok");
+      logUpload(`OK    ${cardId}  ${parsed.name}`, "ok");
     } catch (err) {
       logUpload(`FAIL  ${file.name}  (${err.message})`, "fail");
     }
