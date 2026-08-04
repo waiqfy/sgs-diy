@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>国战录 · Card Log</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="seal">戰</div>
+    <h1>国战录</h1>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="browse">图鉴 Browse</button>
+      <button class="tab-btn" data-tab="log">记录 Log Game</button>
+      <button class="tab-btn" data-tab="upload">录入 Upload</button>
+    </nav>
+  </header>
+
+  <!-- ===== BROWSE ===== -->
+  <section id="tab-browse" class="tab-panel active">
+    <div class="toolbar">
+      <input id="search-input" type="text" placeholder="搜索武将名 · search name" />
+      <div class="faction-filters" id="faction-filters">
+        <button class="faction-chip active" data-faction="ALL">全部</button>
+        <button class="faction-chip" data-faction="WEI">魏</button>
+        <button class="faction-chip" data-faction="SHU">蜀</button>
+        <button class="faction-chip" data-faction="WU">吴</button>
+        <button class="faction-chip" data-faction="QUN">群</button>
+        <button class="faction-chip" data-faction="OTHER">其他</button>
+      </div>
+      <span id="card-count" class="count-label"></span>
+    </div>
+    <div id="card-grid" class="card-grid"></div>
+  </section>
+
+  <!-- ===== LOG GAME ===== -->
+  <section id="tab-log" class="tab-panel">
+    <div class="log-layout">
+      <div class="log-picker">
+        <input id="log-search-input" type="text" placeholder="搜索武将名 · search name to add" />
+        <div class="faction-filters" id="log-faction-filters">
+          <button class="faction-chip active" data-faction="ALL">全部</button>
+          <button class="faction-chip" data-faction="WEI">魏</button>
+          <button class="faction-chip" data-faction="SHU">蜀</button>
+          <button class="faction-chip" data-faction="WU">吴</button>
+          <button class="faction-chip" data-faction="QUN">群</button>
+          <button class="faction-chip" data-faction="OTHER">其他</button>
+        </div>
+        <div id="log-card-grid" class="card-grid small"></div>
+      </div>
+      <div class="log-session">
+        <h2>本局登场 <span id="session-card-count">(0)</span></h2>
+        <div id="session-cards" class="session-cards"></div>
+        <textarea id="session-notes" placeholder="备注 · notes (optional)"></textarea>
+        <button id="save-session-btn" class="primary-btn">保存本局 Save Session</button>
+        <p id="save-status" class="status-line"></p>
+
+        <h3 class="history-heading">历史记录 History</h3>
+        <div id="session-history" class="session-history"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== UPLOAD ===== -->
+  <section id="tab-upload" class="tab-panel">
+    <div class="upload-box">
+      <p class="upload-hint">
+        文件名格式 · filename pattern:<br/>
+        <code>国战UI.WEI044.素玄.程昱.png</code>
+      </p>
+      <div id="dropzone" class="dropzone">
+        <p>拖拽图片到此处 · Drag &amp; drop card images here</p>
+        <p class="dropzone-sub">or click to choose files</p>
+        <input id="file-input" type="file" multiple accept="image/*" />
+      </div>
+      <div id="upload-log" class="upload-log"></div>
+    </div>
+  </section>
+
+  <!-- Card detail modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-content">
+      <button id="modal-close" class="modal-close">&times;</button>
+      <img id="modal-img" src="" alt="" />
+      <div class="modal-info">
+        <span id="modal-faction-badge" class="faction-badge"></span>
+        <h2 id="modal-name"></h2>
+        <p id="modal-id" class="modal-id"></p>
+
+        <div class="rating-section">
+          <p class="rating-label">评分 · Rate this card</p>
+          <div class="rating-buttons" id="rating-buttons">
+            <button class="rating-btn" data-rating="超模">超模<span class="rating-count" data-rating-count="超模">0</span></button>
+            <button class="rating-btn" data-rating="夯">夯<span class="rating-count" data-rating-count="夯">0</span></button>
+            <button class="rating-btn" data-rating="一般">一般<span class="rating-count" data-rating-count="一般">0</span></button>
+            <button class="rating-btn" data-rating="拉">拉<span class="rating-count" data-rating-count="拉">0</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
