@@ -416,9 +416,112 @@ textarea#session-notes {
   text-align: center;
 }
 
-@media (max-width: 800px) {
-  .log-layout { grid-template-columns: 1fr; }
-  .log-session { position: static; }
+/* ===== Log page: 8 players x 3 card slots ===== */
+.players-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.player-panel {
+  background: var(--ink-raised);
+  border: 1px solid rgba(238,227,205,0.15);
+  border-radius: 8px;
+  padding: 10px;
+}
+.player-label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--paper-dim);
+  margin: 0 0 8px;
+  text-align: center;
+}
+.player-slots { display: flex; gap: 6px; }
+.slot-block {
+  flex: 1;
+  aspect-ratio: 3/4;
+  border: 1px dashed rgba(238,227,205,0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: var(--ink);
+}
+.slot-block:hover { border-color: var(--wei); }
+.slot-block .slot-plus { color: var(--paper-dim); font-size: 20px; }
+.slot-block img { width: 100%; height: 100%; object-fit: cover; }
+.slot-block .slot-name {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: rgba(0,0,0,0.65);
+  color: var(--paper);
+  font-size: 10px;
+  text-align: center;
+  padding: 2px 0;
+}
+.slot-remove {
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: var(--paper);
+  border: none;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.log-controls {
+  background: var(--ink-raised);
+  border: 1px solid rgba(238,227,205,0.12);
+  border-radius: 8px;
+  padding: 16px;
+  max-width: 480px;
+}
+
+/* ===== Upload type selector ===== */
+.upload-type-label {
+  display: block;
+  font-size: 13px;
+  color: var(--paper-dim);
+  text-align: center;
+  margin-bottom: 8px;
+}
+.upload-type-select {
+  display: block;
+  margin: 0 auto 18px;
+  background: var(--ink-raised);
+  border: 1px solid rgba(238,227,205,0.25);
+  color: var(--paper);
+  font-family: var(--font-body);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.dropzone.disabled { opacity: 0.4; pointer-events: none; }
+
+/* ===== Picker modal (search-by-name) ===== */
+.picker-content { max-width: 520px; padding: 18px; }
+.picker-title { font-family: var(--font-display); font-size: 15px; margin: 4px 0 12px; }
+#picker-search {
+  width: 100%;
+  background: var(--ink);
+  border: 1px solid rgba(238,227,205,0.2);
+  color: var(--paper);
+  padding: 9px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+#picker-grid { max-height: 400px; overflow-y: auto; }
+
+@media (max-width: 900px) {
+  .players-grid { grid-template-columns: repeat(2, 1fr); }
   .topbar { flex-wrap: wrap; }
   .tabs { width: 100%; justify-content: space-between; margin-left: 0; }
 }

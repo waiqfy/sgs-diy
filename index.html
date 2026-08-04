@@ -37,47 +37,52 @@
 
   <!-- ===== LOG GAME ===== -->
   <section id="tab-log" class="tab-panel">
-    <div class="log-layout">
-      <div class="log-picker">
-        <input id="log-search-input" type="text" placeholder="搜索武将名 · search name to add" />
-        <div class="faction-filters" id="log-faction-filters">
-          <button class="faction-chip active" data-faction="ALL">全部</button>
-          <button class="faction-chip" data-faction="WEI">魏</button>
-          <button class="faction-chip" data-faction="SHU">蜀</button>
-          <button class="faction-chip" data-faction="WU">吴</button>
-          <button class="faction-chip" data-faction="QUN">群</button>
-          <button class="faction-chip" data-faction="OTHER">其他</button>
-        </div>
-        <div id="log-card-grid" class="card-grid small"></div>
-      </div>
-      <div class="log-session">
-        <h2>本局登场 <span id="session-card-count">(0)</span></h2>
-        <div id="session-cards" class="session-cards"></div>
-        <textarea id="session-notes" placeholder="备注 · notes (optional)"></textarea>
-        <button id="save-session-btn" class="primary-btn">保存本局 Save Session</button>
-        <p id="save-status" class="status-line"></p>
-
-        <h3 class="history-heading">历史记录 History</h3>
-        <div id="session-history" class="session-history"></div>
-      </div>
+    <div class="players-grid" id="players-grid"></div>
+    <div class="log-controls">
+      <textarea id="session-notes" placeholder="备注 · notes (optional)"></textarea>
+      <button id="save-session-btn" class="primary-btn">保存本局 Save Session</button>
+      <p id="save-status" class="status-line"></p>
     </div>
+    <h3 class="history-heading">历史记录 History</h3>
+    <div id="session-history" class="session-history"></div>
   </section>
 
   <!-- ===== UPLOAD ===== -->
   <section id="tab-upload" class="tab-panel">
     <div class="upload-box">
       <p class="upload-hint">
-        文件名格式 · filename pattern:<br/>
+        文件名格式 · filename pattern (name = last segment):<br/>
         <code>国战UI.WEI044.素玄.程昱.png</code>
       </p>
-      <div id="dropzone" class="dropzone">
+
+      <label class="upload-type-label" for="upload-type-select">上传前先选择类型 · Choose a type before uploading</label>
+      <select id="upload-type-select" class="upload-type-select">
+        <option value="">— 请选择 · choose type —</option>
+        <option value="WEI">魏 WEI</option>
+        <option value="SHU">蜀 SHU</option>
+        <option value="WU">吴 WU</option>
+        <option value="QUN">群 QUN</option>
+        <option value="OTHER">其他 OTHER</option>
+      </select>
+
+      <div id="dropzone" class="dropzone disabled">
         <p>拖拽图片到此处 · Drag &amp; drop card images here</p>
         <p class="dropzone-sub">or click to choose files</p>
-        <input id="file-input" type="file" multiple accept="image/*" />
+        <input id="file-input" type="file" multiple accept="image/*" disabled />
       </div>
       <div id="upload-log" class="upload-log"></div>
     </div>
   </section>
+
+  <!-- Card picker modal: search by name to fill a player's slot -->
+  <div id="picker-modal" class="modal hidden">
+    <div class="modal-content picker-content">
+      <button id="picker-close" class="modal-close">&times;</button>
+      <h3 class="picker-title" id="picker-title">选择武将 · Search by name</h3>
+      <input id="picker-search" type="text" placeholder="搜索武将名 · search name" />
+      <div id="picker-grid" class="card-grid small"></div>
+    </div>
+  </div>
 
   <!-- Card detail modal -->
   <div id="modal" class="modal hidden">

@@ -5,9 +5,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 const FACTION_LABEL = { WEI: "魏", SHU: "蜀", WU: "吴", QUN: "群", OTHER: "其他" };
 const RATING_OPTIONS = ["超模", "夯", "一般", "拉"];
+const PLAYER_COUNT = 8;
+const SLOTS_PER_PLAYER = 3;
 
-let allCards = [];        // full list from DB
-let currentSession = [];  // cards added to the in-progress log
+let allCards = [];   // full list from DB
+// session[playerIndex][slotIndex] = card object | null
+let session = Array.from({ length: PLAYER_COUNT }, () => Array(SLOTS_PER_PLAYER).fill(null));
 
 /* ---------------------------------------------------------
    Tab navigation
@@ -38,8 +41,7 @@ async function loadCards() {
     return;
   }
   allCards = data || [];
-  renderGrid("card-grid", allCards, { addable: false });
-  renderGrid("log-card-grid", allCards, { addable: true, small: true });
+  renderGrid("card-grid", allCards, { pickable: false });
   updateCardCount();
 }
 
@@ -48,9 +50,11 @@ function updateCardCount() {
 }
 
 /* ---------------------------------------------------------
-   Render a grid of cards into a target container
+   Render a grid of cards into a target container.
+   pickable=true is used inside the picker modal, where clicking
+   a card fills the currently-targeted player slot.
 --------------------------------------------------------- */
-function renderGrid(containerId, cards, { addable }) {
+function renderGrid(containerId, cards, { pickable }) {
   const el = document.getElementById(containerId);
   el.innerHTML = "";
   if (cards.length === 0) {
@@ -62,26 +66,22 @@ function renderGrid(containerId, cards, { addable }) {
     tile.className = "card-tile";
     tile.innerHTML = `
       <span class="faction-dot ${card.faction}"></span>
-      ${addable ? `<button class="tile-add-btn" title="Add to session">+</button>` : ""}
       <img src="${card.image_url}" alt="${card.name}" loading="lazy" />
       <div class="tile-name">${card.name}</div>
     `;
-    tile.querySelector("img").addEventListener("click", () => openModal(card));
-    tile.querySelector(".tile-name").addEventListener("click", () => openModal(card));
-    if (addable) {
-      tile.querySelector(".tile-add-btn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        addToSession(card);
-      });
+    if (pickable) {
+      tile.addEventListener("click", () => choosePickedCard(card));
+    } else {
+      tile.addEventListener("click", () => openModal(card));
     }
     el.appendChild(tile);
   });
 }
 
 /* ---------------------------------------------------------
-   Search + faction filter (shared logic for browse & log pickers)
+   Browse: search + faction filter
 --------------------------------------------------------- */
-function wireFilterControls({ searchInputId, filterContainerId, gridId, addable }) {
+function wireFilterControls({ searchInputId, filterContainerId, gridId, pickable }) {
   const searchInput = document.getElementById(searchInputId);
   const filterContainer = document.getElementById(filterContainerId);
   let activeFaction = "ALL";
@@ -93,7 +93,7 @@ function wireFilterControls({ searchInputId, filterContainerId, gridId, addable 
       const searchOk = !q || c.name.includes(q) || c.card_id.toLowerCase().includes(q.toLowerCase());
       return factionOk && searchOk;
     });
-    renderGrid(gridId, filtered, { addable });
+    renderGrid(gridId, filtered, { pickable });
   }
 
   searchInput.addEventListener("input", apply);
@@ -111,17 +111,11 @@ wireFilterControls({
   searchInputId: "search-input",
   filterContainerId: "faction-filters",
   gridId: "card-grid",
-  addable: false,
-});
-wireFilterControls({
-  searchInputId: "log-search-input",
-  filterContainerId: "log-faction-filters",
-  gridId: "log-card-grid",
-  addable: true,
+  pickable: false,
 });
 
 /* ---------------------------------------------------------
-   Modal (full-res card view)
+   Modal (full-res card view + ratings)
 --------------------------------------------------------- */
 const modal = document.getElementById("modal");
 let currentModalCardId = null;
@@ -142,10 +136,6 @@ function openModal(card) {
 document.getElementById("modal-close").addEventListener("click", () => modal.classList.add("hidden"));
 modal.addEventListener("click", (e) => { if (e.target === modal) modal.classList.add("hidden"); });
 
-/* ---------------------------------------------------------
-   Ratings ("超模" / "夯" / "一般" / "拉") — one row per vote,
-   counts are tallied client-side per card.
---------------------------------------------------------- */
 async function loadRatingCounts(cardId) {
   const counts = { "超模": 0, "夯": 0, "一般": 0, "拉": 0 };
   const { data, error } = await supabase
@@ -169,54 +159,111 @@ document.querySelectorAll(".rating-btn").forEach((btn) => {
     if (!currentModalCardId) return;
     const rating = btn.dataset.rating;
     btn.disabled = true;
-    const { error } = await supabase
-      .from("card_ratings")
-      .insert({ card_id: currentModalCardId, rating });
+    const { error } = await supabase.from("card_ratings").insert({ card_id: currentModalCardId, rating });
     btn.disabled = false;
-    if (error) {
-      console.error(error);
-      return;
-    }
+    if (error) { console.error(error); return; }
     loadRatingCounts(currentModalCardId);
   });
 });
 
 /* ---------------------------------------------------------
-   Session (game log) building
+   Log page: 8 players x 3 card slots
 --------------------------------------------------------- */
-function addToSession(card) {
-  if (currentSession.find((c) => c.card_id === card.card_id)) return;
-  currentSession.push(card);
-  renderSession();
-}
-function removeFromSession(cardId) {
-  currentSession = currentSession.filter((c) => c.card_id !== cardId);
-  renderSession();
-}
-function renderSession() {
-  const el = document.getElementById("session-cards");
-  el.innerHTML = "";
-  currentSession.forEach((card) => {
-    const chip = document.createElement("span");
-    chip.className = "session-chip";
-    chip.innerHTML = `${card.name} <button title="remove">&times;</button>`;
-    chip.querySelector("button").addEventListener("click", () => removeFromSession(card.card_id));
-    el.appendChild(chip);
-  });
-  document.getElementById("session-card-count").textContent = `(${currentSession.length})`;
+const playersGrid = document.getElementById("players-grid");
+
+function renderPlayers() {
+  playersGrid.innerHTML = "";
+  for (let p = 0; p < PLAYER_COUNT; p++) {
+    const panel = document.createElement("div");
+    panel.className = "player-panel";
+    panel.innerHTML = `<p class="player-label">玩家 ${p + 1}</p>
+      <div class="player-slots" data-player="${p}"></div>`;
+    const slotsEl = panel.querySelector(".player-slots");
+
+    for (let s = 0; s < SLOTS_PER_PLAYER; s++) {
+      const card = session[p][s];
+      const block = document.createElement("div");
+      block.className = "slot-block";
+      if (card) {
+        block.innerHTML = `
+          <button class="slot-remove" title="remove">&times;</button>
+          <img src="${card.image_url}" alt="${card.name}" />
+          <span class="slot-name">${card.name}</span>
+        `;
+        block.querySelector(".slot-remove").addEventListener("click", (e) => {
+          e.stopPropagation();
+          session[p][s] = null;
+          renderPlayers();
+        });
+        block.addEventListener("click", () => openPicker(p, s));
+      } else {
+        block.innerHTML = `<span class="slot-plus">+</span>`;
+        block.addEventListener("click", () => openPicker(p, s));
+      }
+      slotsEl.appendChild(block);
+    }
+    playersGrid.appendChild(panel);
+  }
 }
 
+/* ---------------------------------------------------------
+   Picker modal: search by name, click a result to fill the
+   currently targeted player+slot
+--------------------------------------------------------- */
+const pickerModal = document.getElementById("picker-modal");
+const pickerSearch = document.getElementById("picker-search");
+const pickerTitle = document.getElementById("picker-title");
+let pickerTarget = null; // { player, slot }
+
+function openPicker(player, slot) {
+  pickerTarget = { player, slot };
+  pickerTitle.textContent = `玩家 ${player + 1} · 位置 ${slot + 1} — 搜索武将名`;
+  pickerSearch.value = "";
+  renderGrid("picker-grid", allCards, { pickable: true });
+  pickerModal.classList.remove("hidden");
+  pickerSearch.focus();
+}
+function closePicker() {
+  pickerModal.classList.add("hidden");
+  pickerTarget = null;
+}
+function choosePickedCard(card) {
+  if (!pickerTarget) return;
+  session[pickerTarget.player][pickerTarget.slot] = card;
+  renderPlayers();
+  closePicker();
+}
+document.getElementById("picker-close").addEventListener("click", closePicker);
+pickerModal.addEventListener("click", (e) => { if (e.target === pickerModal) closePicker(); });
+pickerSearch.addEventListener("input", () => {
+  const q = pickerSearch.value.trim();
+  const filtered = !q
+    ? allCards
+    : allCards.filter((c) => c.name.includes(q) || c.card_id.toLowerCase().includes(q.toLowerCase()));
+  renderGrid("picker-grid", filtered, { pickable: true });
+});
+
+/* ---------------------------------------------------------
+   Save session
+--------------------------------------------------------- */
 document.getElementById("save-session-btn").addEventListener("click", async () => {
   const statusEl = document.getElementById("save-status");
-  if (currentSession.length === 0) {
-    statusEl.textContent = "请先添加卡片 · Add at least one card first.";
+  const rows = [];
+  session.forEach((slots, playerIdx) => {
+    slots.forEach((card, slotIdx) => {
+      if (card) rows.push({ player: playerIdx + 1, slot: slotIdx + 1, card });
+    });
+  });
+
+  if (rows.length === 0) {
+    statusEl.textContent = "请先给至少一位玩家添加卡片 · Add at least one card first.";
     return;
   }
   statusEl.textContent = "保存中... saving...";
 
   const notes = document.getElementById("session-notes").value.trim();
 
-  const { data: session, error: sessionError } = await supabase
+  const { data: newSession, error: sessionError } = await supabase
     .from("game_sessions")
     .insert({ notes })
     .select()
@@ -227,8 +274,13 @@ document.getElementById("save-session-btn").addEventListener("click", async () =
     return;
   }
 
-  const rows = currentSession.map((c) => ({ session_id: session.id, card_id: c.card_id }));
-  const { error: linkError } = await supabase.from("session_cards").insert(rows);
+  const linkRows = rows.map((r) => ({
+    session_id: newSession.id,
+    card_id: r.card.card_id,
+    player_number: r.player,
+    slot_number: r.slot,
+  }));
+  const { error: linkError } = await supabase.from("session_cards").insert(linkRows);
 
   if (linkError) {
     statusEl.textContent = `Failed: ${linkError.message}`;
@@ -236,19 +288,19 @@ document.getElementById("save-session-btn").addEventListener("click", async () =
   }
 
   statusEl.textContent = "已保存 · Saved!";
-  currentSession = [];
-  renderSession();
+  session = Array.from({ length: PLAYER_COUNT }, () => Array(SLOTS_PER_PLAYER).fill(null));
+  renderPlayers();
   document.getElementById("session-notes").value = "";
   loadSessionHistory();
 });
 
 /* ---------------------------------------------------------
-   Session history
+   Session history — grouped by player
 --------------------------------------------------------- */
 async function loadSessionHistory() {
   const { data: sessions, error } = await supabase
     .from("game_sessions")
-    .select("id, played_at, notes, session_cards(card_id)")
+    .select("id, played_at, notes, session_cards(card_id, player_number, slot_number)")
     .order("played_at", { ascending: false })
     .limit(20);
 
@@ -263,48 +315,53 @@ async function loadSessionHistory() {
   }
   el.innerHTML = "";
   sessions.forEach((s) => {
-    const names = (s.session_cards || [])
-      .map((sc) => allCards.find((c) => c.card_id === sc.card_id)?.name || sc.card_id)
-      .join(" · ");
+    const byPlayer = {};
+    (s.session_cards || []).forEach((sc) => {
+      const p = sc.player_number || "?";
+      byPlayer[p] = byPlayer[p] || [];
+      const name = allCards.find((c) => c.card_id === sc.card_id)?.name || sc.card_id;
+      byPlayer[p].push(name);
+    });
+    const playerLines = Object.keys(byPlayer)
+      .sort((a, b) => a - b)
+      .map((p) => `玩家${p}: ${byPlayer[p].join("、")}`)
+      .join(" &nbsp;|&nbsp; ");
+
     const div = document.createElement("div");
     div.className = "session-history-item";
     const date = new Date(s.played_at).toLocaleString();
-    div.innerHTML = `<span class="shi-date">${date}</span><br/>${names}${s.notes ? `<br/><em>${s.notes}</em>` : ""}`;
+    div.innerHTML = `<span class="shi-date">${date}</span><br/>${playerLines}${s.notes ? `<br/><em>${s.notes}</em>` : ""}`;
     el.appendChild(div);
   });
 }
 
 /* ---------------------------------------------------------
-   Upload: filename parsing + drag & drop
+   Upload: choose a type first, then parse filenames + drag & drop
 --------------------------------------------------------- */
 // Filenames vary in length (some have an extra descriptive segment before
 // the name), but the actual card NAME is always the last dot-separated
-// segment before the file extension. Faction/id, if present anywhere as a
-// FACTION### segment, is used as a starting guess — you can always correct
-// it afterward in Supabase's Table Editor, so this doesn't need to be exact.
-function parseFilename(filename) {
+// segment before the file extension. The faction/type for the whole batch
+// is whatever the person selects in the dropdown before uploading — it's
+// no longer guessed from the filename, since that guess wasn't reliable.
+function parseFilename(filename, chosenFaction) {
   const dotIdx = filename.lastIndexOf(".");
   const stem = dotIdx >= 0 ? filename.slice(0, dotIdx) : filename;
   const segments = stem.split(".");
-
   const name = segments[segments.length - 1] || stem;
 
-  let faction = "OTHER";
+  // Try to reuse an existing FACTION### id if present in the filename,
+  // otherwise build one from the chosen faction + a sanitized filename.
   let cardId = null;
   for (const seg of segments) {
-    const m = seg.match(/^(WEI|SHU|WU|QUN)(\d+)$/);
-    if (m) {
-      faction = m[1];
-      cardId = `${m[1]}${m[2]}`;
-      break;
-    }
+    const m = seg.match(/^([A-Za-z]+)(\d+)$/);
+    if (m) { cardId = `${chosenFaction}${m[2]}`; break; }
   }
   if (!cardId) {
     const idSafe = stem.replace(/[^A-Za-z0-9\u4e00-\u9fff]+/g, "_");
-    cardId = `OTHER_${idSafe}`;
+    cardId = `${chosenFaction}_${idSafe}`;
   }
 
-  return { faction, cardId, nickname: "", name };
+  return { faction: chosenFaction, cardId, nickname: "", name };
 }
 
 function logUpload(message, cls) {
@@ -315,10 +372,10 @@ function logUpload(message, cls) {
   el.prepend(line);
 }
 
-async function handleFiles(fileList) {
+async function handleFiles(fileList, chosenFaction) {
   const files = Array.from(fileList);
   for (const file of files) {
-    const parsed = parseFilename(file.name);
+    const parsed = parseFilename(file.name, chosenFaction);
     const ext = file.name.slice(file.name.lastIndexOf("."));
     const storagePath = `${parsed.faction}/${parsed.cardId}${ext}`;
 
@@ -342,8 +399,7 @@ async function handleFiles(fileList) {
       );
       if (dbError) throw dbError;
 
-      const tag = parsed.faction === "OTHER" ? " (no faction detected — set it manually in Supabase)" : "";
-      logUpload(`OK    ${parsed.cardId}  ${parsed.name}${tag}`, parsed.faction === "OTHER" ? "skip" : "ok");
+      logUpload(`OK    ${parsed.cardId}  ${parsed.name}`, "ok");
     } catch (err) {
       logUpload(`FAIL  ${file.name}  (${err.message})`, "fail");
     }
@@ -353,13 +409,23 @@ async function handleFiles(fileList) {
 
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("file-input");
+const typeSelect = document.getElementById("upload-type-select");
 
-fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+typeSelect.addEventListener("change", () => {
+  const enabled = !!typeSelect.value;
+  dropzone.classList.toggle("disabled", !enabled);
+  fileInput.disabled = !enabled;
+});
+
+fileInput.addEventListener("change", (e) => {
+  if (!typeSelect.value) return;
+  handleFiles(e.target.files, typeSelect.value);
+});
 
 ["dragenter", "dragover"].forEach((evt) =>
   dropzone.addEventListener(evt, (e) => {
     e.preventDefault();
-    dropzone.classList.add("drag-over");
+    if (typeSelect.value) dropzone.classList.add("drag-over");
   })
 );
 ["dragleave", "drop"].forEach((evt) =>
@@ -369,7 +435,8 @@ fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
   })
 );
 dropzone.addEventListener("drop", (e) => {
-  if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+  if (!typeSelect.value) return;
+  if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files, typeSelect.value);
 });
 
 /* ---------------------------------------------------------
@@ -377,3 +444,4 @@ dropzone.addEventListener("drop", (e) => {
 --------------------------------------------------------- */
 loadCards();
 loadSessionHistory();
+renderPlayers();
