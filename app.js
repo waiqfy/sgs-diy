@@ -341,25 +341,21 @@ async function loadSessionHistory() {
 // Filenames vary in length (some have an extra descriptive segment before
 // the name), but the actual card NAME is always the last dot-separated
 // segment before the file extension. The faction/type for the whole batch
-// is whatever the person selects in the dropdown before uploading — it's
-// no longer guessed from the filename, since that guess wasn't reliable.
+// is whatever the person selects in the dropdown before uploading.
+//
+// The card ID is built from faction + name (not the filename's number, and
+// not the whole filename) so that:
+//   - two different cards that happen to share a reused number stay separate
+//   - re-uploading a file with the same name overwrites the old version,
+//     since that's normally just an updated image/edit of the same card
 function parseFilename(filename, chosenFaction) {
   const dotIdx = filename.lastIndexOf(".");
   const stem = dotIdx >= 0 ? filename.slice(0, dotIdx) : filename;
   const segments = stem.split(".");
   const name = segments[segments.length - 1] || stem;
 
-  // Try to reuse an existing FACTION### id if present in the filename,
-  // otherwise build one from the chosen faction + a sanitized filename.
-  let cardId = null;
-  for (const seg of segments) {
-    const m = seg.match(/^([A-Za-z]+)(\d+)$/);
-    if (m) { cardId = `${chosenFaction}${m[2]}`; break; }
-  }
-  if (!cardId) {
-    const idSafe = stem.replace(/[^A-Za-z0-9\u4e00-\u9fff]+/g, "_");
-    cardId = `${chosenFaction}_${idSafe}`;
-  }
+  const nameSafe = name.replace(/[^A-Za-z0-9\u4e00-\u9fff]+/g, "_");
+  const cardId = `${chosenFaction}_${nameSafe}`;
 
   return { faction: chosenFaction, cardId, nickname: "", name };
 }
